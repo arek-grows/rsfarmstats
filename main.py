@@ -27,48 +27,47 @@ herbs_name_dict = [
 
 class HerbTable:
 
-    def __init__(self, name, short_name):
+    def __init__(self, name):
         self.name = name
-        self.short_name = short_name
+        self.harvest_yields = []
 
         self.deaths = 0
         self.nr_harvests = 0
         self.lowest_yield = None
-        self.highest_yield = None
+        self.highest_yield = 0
 
         self.death_rate = None
+        self.total_harvested = None
         self.average_yield = None
         self.median_yield = None
-        self.harvest_yields = []
 
     def calc_class_attrs(self):
         self.death_rate = self.deaths / self.nr_harvests
-        self.average_yield = sum(self.harvest_yields) / len(self.harvest_yields)
+        self.total_harvested = sum(self.harvest_yields)
+        self.average_yield = self.total_harvested / len(self.harvest_yields)
         self.median_yield = median(self.harvest_yields)
-        self.highest_yield = max(self.harvest_yields)
 
-    # todo: calc stats AFTER adding ALL yields (in main loop)
     def add_yields(self, yields):
-        nr_harvests_current = len(yields)
         for yy in yields:
+            self.nr_harvests += 1
             if yy == 0:
                 self.deaths += 1
             elif self.lowest_yield is None or yy < self.lowest_yield:
                 self.lowest_yield = yy
+            elif yy > self.highest_yield:
+                self.highest_yield = yy
             self.harvest_yields.append(yy)
-        self.nr_harvests += nr_harvests_current
-        # self.calc_class_attrs()
 
     def print_stats(self):
         if self.lowest_yield is None:
-            print(f"No data for {self.name}")
+            # print(f"No data for {self.name}")
             return
         print(f"""Stats for {self.name} harvests:
         
         # of Harvests:   {self.nr_harvests}
         Lowest Yield:    {self.lowest_yield}
         Highest Yield:   {self.highest_yield}
-        Total Harvested: {sum(self.harvest_yields)}
+        Total Harvested: {self.total_harvested}
         
         Death Chance:    {self.death_rate * 100}%
         Median Yield:    {self.median_yield}
@@ -78,24 +77,24 @@ class HerbTable:
 
     def validate_data(self):
         # bug testing function
-        print(f"\nValidating data for {self.name}...")
-        if len(self.harvest_yields) == 0:
-            print("No data to revalidate.")
+        if len(self.lowest_yield) is None:
+            # print("No data to revalidate.")
             return
+        print(f"\nValidating data for {self.name}...")
         if self.harvest_yields.count(0) != self.deaths:
             print("NOT OK: Deaths do not match.")
         else:
             print("OK: Deaths match.")
         if self.nr_harvests != len(self.harvest_yields):
-            print("NOT OK: Number oh harvests do NOT match.")
+            print("NOT OK: Number of harvests do NOT match.")
         else:
             print("OK: Number of harvests match.")
         print(
-            f"???: average_yield = {self.average_yield} | average = {sum(self.harvest_yields) / len(self.harvest_yields)}")
+            f"Check: average_yield = {self.average_yield} | average = {sum(self.harvest_yields) / len(self.harvest_yields)}")
         print('Done validating.')
 
 
-# todo: ?
+# todo: ? good i think
 def calc_data_to_herb_table(herb_object, yield_list):
     """transforms cumulative data into yield per allotment harvest"""
     first_yield = yield_list[0]
@@ -173,12 +172,16 @@ if __name__ == '__main__':
     #     short_herb_names.append(hh.short_name)
     # before_str = ""
     # loop_one = True
-    
+
+    # todo: after showing stats and validating, print a list of herbs with empty data
 
     # todo: new functionality: show stats then, validate data or exit
     # import data from spreadsheet into objects here
-    # errors for invalid spreadsheet format (todo: determine correct format, don't need short herb names)
+    # errors for invalid spreadsheet format (todo: determine correct format)
 
+    # show calc'd data and export into spreadsheet here
+
+    # [validate] or [exit] here
 
     # while loop_one:
         # print(f"{before_str}Herbs: {', '.join(short_herb_names)}")
