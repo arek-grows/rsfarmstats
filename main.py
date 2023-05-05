@@ -7,10 +7,6 @@ harvests, deaths, average yield, median yield and list of harvest yields
 - class has a function that calculates the class attributes after info has been recorded
 - harvest data recorded into a spreadsheet for ease of use then imported to each object through a class method
 
-
-TODO: restructure so that harvest data is in one easily edittable (excel?) file. no need for a pickle file to store the
-TODO: objects. the objects should import the data from the new easily edittable file when an herb/all herbs is called upon
-TODO: then show in terminal or save in spreadsheet? do both, i think
 this is inefficient at a large scale but it's fine for this small project
  """
 
@@ -18,6 +14,7 @@ import global_data as gd
 from generate_default_spreadsheet import create_default_spreadsheet
 from statistics import median
 from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
 
 
 class HerbTable:
@@ -58,7 +55,8 @@ class HerbTable:
     def print_stats(self):
         if self.lowest_yield is None:
             return False
-        print(f"""Stats for {self.name} harvests:
+        print(f"""
+        Stats for {self.name} harvests:
         
         # of Harvests:   {self.nr_harvests}
         Total Harvested: {self.total_harvested}
@@ -91,7 +89,6 @@ class HerbTable:
         return True
 
 
-# todo: ? good i think
 def calc_cumulative_data_to_yields(yield_list: list):
     """transforms cumulative data into yield per allotment harvest"""
     first_yield = yield_list[0]
@@ -102,27 +99,71 @@ def calc_cumulative_data_to_yields(yield_list: list):
         total_yield = yy
     return real_yields
 
-# todo: figure out how im doing this
-def update_herb_objects_through_harvest_sheet(sheet, herb_objs_dict: dict, herb_row_idxs: list):
-    # for hridx in herb_row_idxs:
-    #     current_herb_name = sts_sheet.cell(row=1, column=hridx).value
-    #     current_row = hridx + 1
-    #
-    #     while True:
-    #         if not sts_sheet.cell(row=current_row, column=hridx).value:
-    #             break
-    #         else:
-    #             for cc in range(hridx, hridx + 5):
-    #                 if sts_sheet.cell(row=current_row, )
-    #
-    #                 pass
-    #         current_row += 1
-    #     pass
-    return [{"Herb": [[23, 4], [34, 2]]}, {}]
+
+def update_herb_objects_through_harvest_sheet(inp_sheet, herb_objs_dict: dict, herb_column_idxs: list):
+    green_cell_ranges = []
+    # herb columns loop
+    for hcidx in herb_column_idxs:
+        current_herb_name = inp_sheet.cell(row=1, column=hcidx).value
+        cumulative_yields_list = []
+        yields_list = []
+
+        current_row = 2
+        current_column = hcidx
+        found_first_green_cell = False
+        green_cell_range_begin = ""
+        green_cell_range_end = ""
+
+        # rows loop
+        while True:
+            current_row_cell = inp_sheet.cell(row=current_row, column=hcidx)
+            # if the current row is empty, break the infinite rows loop, going to the next herb - and update last green
+            # cell
+            if current_row_cell.value is None:
+                green_cell_range_end = inp_sheet.cell(row=current_row - 1, column=current_column + 4).coordinate
+                break
+            # if green cell, skip
+            elif current_row_cell.fill.start_color.index == gd.finished_cell_green:
+                current_row += 1
+                continue
+            else:
+                if not found_first_green_cell:
+                    green_cell_range_begin = current_row_cell.coordinate
+                    found_first_green_cell = True
+                # loop through the row
+                for cc in range(hcidx, hcidx + 6):
+                    cell_value = inp_sheet.cell(row=current_row, column=current_column).value
+                    if type(cell_value) is int and cell_value >= 0:
+                        cumulative_yields_list.append(cell_value)
+                        current_column += 1
+                    elif cell_value is None or cc == hcidx + 5:
+                        yields_list += calc_cumulative_data_to_yields(cumulative_yields_list)
+                        cumulative_yields_list = []
+                        # go to next row and reset column index
+                        current_row += 1
+                        current_column = hcidx
+                        break
+        if found_first_green_cell:
+            green_cell_ranges.append([green_cell_range_begin, green_cell_range_end])
+        if yields_list:
+            herb_objs_dict[current_herb_name].add_yields(yields_list)
+            herb_objs_dict[current_herb_name].calc_class_attrs()
+    return herb_objs_dict, green_cell_ranges
 
 
-def convert_HerbTables_to_stats_sheet(herb_objs_dict: dict, sheet):
-    return
+def convert_HerbTables_to_stats_sheet(herb_objs_dict: dict, sts_sheet):
+    for rr in range(2, len(gd.herb_names) + 2):
+        herb_name = sts_sheet.cell(row=rr, column=1).value
+        sts_sheet.cell(row=rr, column=2).value = herb_objs_dict[herb_name].nr_harvests
+        sts_sheet.cell(row=rr, column=3).value = herb_objs_dict[herb_name].total_harvested
+        sts_sheet.cell(row=rr, column=4).value = herb_objs_dict[herb_name].lowest_yield
+        sts_sheet.cell(row=rr, column=5).value = herb_objs_dict[herb_name].highest_yield
+        sts_sheet.cell(row=rr, column=6).value = herb_objs_dict[herb_name].death_rate
+        sts_sheet.cell(row=rr, column=7).value = herb_objs_dict[herb_name].median_yield
+        sts_sheet.cell(row=rr, column=8).value = herb_objs_dict[herb_name].average_yield
+        sts_sheet.cell(row=rr, column=9).value = herb_objs_dict[herb_name].yield_per_seed
+        harvest_yields_string = ", ".join([str(hh) for hh in herb_objs_dict[herb_name].harvest_yields])
+        sts_sheet.cell(row=rr, column=10).value = harvest_yields_string
 
 
 def convert_stats_sheet_to_HerbTables(sts_sheet, herb_objs_dict: dict):
@@ -130,23 +171,30 @@ def convert_stats_sheet_to_HerbTables(sts_sheet, herb_objs_dict: dict):
         herb_name = sts_sheet.cell(row=rr, column=1).value
         if not sts_sheet.cell(row=rr, column=2).value:
             continue
-        herb_objs_dict[herb_name].nr_harvests = sts_sheet.cell(row=rr, column=2).value
-        herb_objs_dict[herb_name].total_harvested = sts_sheet.cell(row=rr, column=3).value
-        herb_objs_dict[herb_name].lowest_yield = sts_sheet.cell(row=rr, column=4).value
-        herb_objs_dict[herb_name].highest_yield = sts_sheet.cell(row=rr, column=5).value
-        herb_objs_dict[herb_name].death_rate = sts_sheet.cell(row=rr, column=6).value
-        herb_objs_dict[herb_name].median_yield = sts_sheet.cell(row=rr, column=7).value
-        herb_objs_dict[herb_name].average_yield = sts_sheet.cell(row=rr, column=8).value
-        herb_objs_dict[herb_name].yield_per_seed = sts_sheet.cell(row=rr, column=9).value
-        herb_objs_dict[herb_name].harvest_yields = sts_sheet.cell(row=rr, column=10).value
+        herb_objs_dict[herb_name].nr_harvests = int(sts_sheet.cell(row=rr, column=2).value)
+        herb_objs_dict[herb_name].total_harvested = int(sts_sheet.cell(row=rr, column=3).value)
+        herb_objs_dict[herb_name].lowest_yield = int(sts_sheet.cell(row=rr, column=4).value)
+        herb_objs_dict[herb_name].highest_yield = int(sts_sheet.cell(row=rr, column=5).value)
+        herb_objs_dict[herb_name].death_rate = float(sts_sheet.cell(row=rr, column=6).value)
+        herb_objs_dict[herb_name].median_yield = int(sts_sheet.cell(row=rr, column=7).value)
+        herb_objs_dict[herb_name].average_yield = float(sts_sheet.cell(row=rr, column=8).value)
+        herb_objs_dict[herb_name].yield_per_seed = float(sts_sheet.cell(row=rr, column=9).value)
+        harvest_yields_list = [int(ll) for ll in sts_sheet.cell(row=rr, column=10).value.split(", ")]
+        herb_objs_dict[herb_name].harvest_yields = harvest_yields_list
     return herb_objs_dict
 
 
+def print_all_stats_to_console(herb_objs_dict: dict):
+    empty_herbs = []
+    for herb_name, herb_objct in herb_objs_dict.items():
+        if not herb_objct.nr_harvests:
+            empty_herbs.append(herb_name)
+        else:
+            herb_objct.print_stats()
+    print(f"Herbs with empty data: {empty_herbs}")
+
+
 if __name__ == '__main__':
-    # todo: 3: after showing stats and validating, print a list of herbs with empty data
-    # todo: DONE: check if spreadsheet exists
-    # todo: 2: new functionality: [add] new data from spreadsheet (then show stats), or ask to show [stats] then,
-    # todo: 2: validate data or exit
     herb_book = None
     try:
         herb_book = load_workbook(gd.spreadsheet_path)
@@ -160,8 +208,8 @@ if __name__ == '__main__':
     input_sheet = herb_book[gd.herbsheet_names[0]]
     stats_sheet = herb_book[gd.herbsheet_names[1]]
 
-    # create default objects or load objects from spreadsheet using pickling
-    #todo: working now - how to update objects if the class is updated?
+    # todo: working now - how to update objects if the class is updated?
+    # create herb objects into a dictionary and import data into them through the spreadsheet
     herb_idx_locs_in_first_sheet = list(range(2, 3 + ((len(gd.herb_names) - 1) * 6), 6))
     herb_objects = {herb_name: HerbTable(herb_name) for herb_name in gd.herb_names}
     herb_objects = convert_stats_sheet_to_HerbTables(stats_sheet, herb_objects)
@@ -169,14 +217,27 @@ if __name__ == '__main__':
         print("[add] new data from spreadsheet, show [stats], [exit]")
         match input().lower():
 
-            # todo: added data from spreadsheet should turn green
-            # todo: save after done
             case "add":
+                # import input sheet data into objects
+                herb_objects, g_c_ranges = update_herb_objects_through_harvest_sheet(input_sheet, herb_objects,
+                                                                                     herb_idx_locs_in_first_sheet)
+                # color finished cells green
+                for cell_ranges in g_c_ranges:
+                    cell_range = input_sheet[cell_ranges[0]:cell_ranges[1]]
+                    for cell_tuple in cell_range:
+                        for cell in cell_tuple:
+                            cell.fill = PatternFill("solid", fgColor=gd.finished_cell_green)
 
-                pass
+                # update stats sheet
+                convert_HerbTables_to_stats_sheet(herb_objects, stats_sheet)
+                herb_book.save(gd.spreadsheet_path)
+                print("Data from spreadsheet parsed.")
+                print_all_stats_to_console(herb_objects)
+                exit()
 
             case "stats":
-                pass
+                print_all_stats_to_console(herb_objects)
+                exit()
 
             case "exit":
                 print("Goodbye!")

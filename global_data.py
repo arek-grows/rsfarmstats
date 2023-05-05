@@ -10,3 +10,6 @@ herb_names = [
 ]
 stats_name_list = ["# of Harvests", "Total Harvested", "Lowest Yield", "Highest Yield", "Death Chance",
                    "Median Yield", "Average Yield", "Yield per Seed", "harvest_yields"]
+herb_green = "00008000"
+finished_cell_green = "0000FF00"
+dont_touch_brown = "00333300"
